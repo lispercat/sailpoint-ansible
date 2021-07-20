@@ -1,0 +1,119 @@
+---
+
+  - name: Stop tomcat9 service
+    systemd: name=tomcat9 state=stopped
+
+  - name: "Ensure we have {{ iiq_ga_file_new }} locally"
+    local_action: stat path="{{ role_path }}/files/{{ iiq_ga_file_new }}"
+    register: ga
+    failed_when: not ga.stat.exists
+
+  - name: "Ensure we have {{ iiq_patch_file_new }} locally"
+    local_action: stat path="{{ role_path }}/files/{{ iiq_patch_file_new }}"
+    register: patch
+    failed_when: not patch.stat.exists
+
+  - name: "Ensure {{ tmp_upgrade_folder }} exists"
+    file:
+      path: "{{ tmp_upgrade_folder }}"
+      state: directory
+
+  - name: "Ensure {{ temp_iiq_backup_path }} exists"
+    file:
+      path: "{{ temp_iiq_backup_path }}"
+      state: directory
+
+  - name: "Backup | Check if we already have a backup of {{ iiq_version_old }}{{ iiq_patch_old }} in {{ temp_iiq_backup_path }}/identityiq"
+    stat: path="{{ temp_iiq_backup_path }}/identityiq"
+    register: identityiq_backup
+
+  - name: "Backup | Copy existing {{ iiq_version_old }}{{ iiq_patch_old }} version to {{ temp_iiq_backup_path }} if it doesn't exist"
+    copy: 
+      src: "{{ iiq_tomcat_path }}" 
+      dest: "{{ temp_iiq_backup_path }}" 
+      remote_src: yes
+      force: no
+    when: not identityiq_backup.stat.exists
+
+  - name: "Remove {{ iiq_tomcat_path }} since we already backed it up"
+    file:
+      path: "{{ iiq_tomcat_path }}"
+      state: absent
+
+  - name: "Unzip {{ iiq_ga_file_new }} into {{ tmp_upgrade_folder }}"
+    unarchive: 
+      src: "{{ role_path }}/files/{{ iiq_ga_file_new }}"
+      dest: "{{ tmp_upgrade_folder }}"
+      remote_src: no
+      creates: "{{ tmp_upgrade_folder }}/identityiq.war"
+
+  - name: "Ensure {{ temp_iiq_path }} exists"
+    file:
+      path: "{{ temp_iiq_path }}"
+      state: directory
+
+  - name: "Unzip {{ tmp_upgrade_folder }}/identityiq.war"
+    unarchive: 
+      src: "{{ tmp_upgrade_folder }}/identityiq.war"
+      dest: "{{ temp_iiq_path }}"
+      remote_src: yes
+      creates: "{{ temp_iiq_path }}/WEB-INF"
+
+  - name: "Grant execute permissions for the {{ temp_iiq_console }}"
+    file:
+      path: "{{ temp_iiq_console }}"
+      mode: a+x
+
+  - name: Find all iiq.* files (iiq.properties, iiq.dat iiq.cfg etc) in the existing installation (from backup)
+    find:
+      paths: "{{ temp_iiq_backup_path }}/identityiq/WEB-INF/classes"
+      patterns: "iiq.*"
+    register: existing_iiq_config_files
+
+  - name: "Copy existing iiq.* files to the temp identityiq"
+    copy: 
+      src: "{{ item.path }}" 
+      dest: "{{ temp_iiq_path }}/WEB-INF/classes" 
+      remote_src: yes
+      force: yes
+    with_items: "{{ existing_iiq_config_files.files }}"
+
+  - name: "Copy {{ temp_iiq_backup_path }}/identityiq/WEB-INF/classes/sailpoint/object/IdentityExtended.hbm.xml file to the temp identityiq"
+    copy: 
+      src: "{{ temp_iiq_backup_path }}/identityiq/WEB-INF/classes/sailpoint/object/IdentityExtended.hbm.xml" 
+      dest: "{{ temp_iiq_path }}/WEB-INF/classes/sailpoint/object" 
+      remote_src: yes
+      force: yes
+
+  - name: "Copy special lib files"
+    copy: 
+      src: "{{ temp_iiq_backup_path }}/identityiq/WEB-INF/lib/{{ item }}" 
+      dest: "{{ temp_iiq_path }}/WEB-INF/lib" 
+      remote_src: yes
+      force: yes
+    with_items: "{{ libs_to_copy }}"
+
+  # Check what's the next version we expect to upgrade to
+  # - name: "Read {{ iiq_upgrade_to_ga_db_script }} to extract version"
+  #   shell: cat "{{ iiq_upgrade_to_ga_db_script }}" | grep -oP "\d+\.\d+-\d+"
+  #   register: ga_db_version
+  # - debug: msg="Version {{ ga_db_version.stdout }}"
+
+
+  - include: get_iiq_database_version.yml
+  - name: "MSSQL Server | Run the database upgrade script to upgrade to {{ iiq_version_new }}"
+    shell: | 
+      /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "{{ mssql_sa_password }}" -i "{{ iiq_upgrade_to_ga_db_script }}"
+  #   when: version_arr == iiq_version_original
+
+  - name: "Upgrade IIQ system to {{ iiq_version_new }} (run 'iiq upgrade' command)"
+    command: "{{ temp_iiq_console }} upgrade"
+    register: iiq_upgrade
+    # when: version_arr == iiq_version_ga_db_upgrade
+    failed_when: '("Success" not in iiq_upgrade.stdout) and ("please use iiq patch" not in iiq_upgrade.stdout)' 
+    #ignore_errors: yes
+
+  - name: Check 'iiq upgrade output'
+    debug: 
+      msg: "{{ iiq_upgrade.stdout }}"
+    when: iiq_upgrade.stdout is defined

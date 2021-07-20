@@ -1,0 +1,7 @@
+---
+# tasks file for java
+  - name: install JRE 11
+    apt: 
+      name: "openjdk-11-jre-headless" 
+      state: present
+    become: yes

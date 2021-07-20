@@ -1,0 +1,51 @@
+---
+
+  - name: "Ensure {{ iiq_tomcat_path }} exists"
+    file:
+      path: "{{ iiq_tomcat_path }}"
+      state: directory
+
+  - name: "Unzip identityiq.war into {{ iiq_tomcat_path }}"
+    unarchive: 
+      src: "{{ role_path }}/files/identityiq.war"
+      dest: "{{ iiq_tomcat_path }}"
+      remote_src: no
+      creates: "{{ iiq_web_inf }}"
+
+  - name: Enable error logging to /var/lib/tomcat9/logs/catalina.out by uncommenting a couple of lines in logging.properties
+    replace:
+      path: "{{ iiq_tomcat_path }}/WEB-INF/classes/logging.properties"
+      regexp: "#org.apache.catalina.core.ContainerBase"
+      replace: "org.apache.catalina.core.ContainerBase"
+
+  - name: "Grant execute permissions for the {{ iiq_console }}"
+    file:
+      path: "{{ iiq_console }}"
+      mode: a+x
+
+  - name: Checks that the DB schema is generated
+    command: "{{ iiq_console }} schema"
+    args:
+      creates: "{{ iiq_create_db_script }}"
+ 
+  - name: Replace identityiq passwords for our own
+    replace:
+      path: "{{ iiq_create_db_script }}"
+      regexp: "WITH PASSWORD='.*'"
+      replace: "WITH PASSWORD='{{ iiq_db_password }}'"
+
+  - name: MSSQL Server | Check identityiq databases (should be 2)
+    shell: "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P {{ mssql_sa_password }} -Q \"select count(*) from sys.databases where name like 'identityiq%'\""
+    register: iid_db_cnt
+    ignore_errors: yes
+
+  - debug: msg="master cnt is {{ iid_db_cnt.stdout }}"
+
+  - name: MSSQL Server | Generate IIQ database
+    shell: | 
+      /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "{{ mssql_sa_password }}" -i "{{ iiq_create_db_script }}"
+    when: iid_db_cnt.stdout.find(" 2") == -1
+
+  - name: Start tomcat9 service
+    systemd: name=tomcat9 state=started
+

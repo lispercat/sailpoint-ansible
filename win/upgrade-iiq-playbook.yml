@@ -1,0 +1,35 @@
+---
+  - hosts: all
+    gather_facts: no
+    vars:
+      ## New variables    
+      date_today: "{{ lookup('pipe', 'date +%Y-%m-%d') }}"
+      iiq_version_old: "8.0"
+      iiq_patch_old: "p1"
+      iiq_version_new: "8.1"
+      iiq_patch_new: "p3"
+      iiq_ga_file_new: "identityiq-{{ iiq_version_new }}.zip"
+      iiq_patch_file_new: "identityiq-{{ iiq_version_new }}{{ iiq_patch_new }}.jar"
+      iiq_patch_file_new_zip: "identityiq-{{ iiq_version_new }}{{ iiq_patch_new }}.zip"
+      temp_download_path: C:\temp
+      tmp_upgrade_folder: "{{ temp_download_path }}\\iiq-upgrade-{{ iiq_version_new }}{{ iiq_patch_new }}"
+      temp_iiq_path: "{{ tmp_upgrade_folder }}\\identityiq"
+      temp_iiq_console: "{{ temp_iiq_path }}\\WEB-INF\\bin\\iiq.bat"
+      iiq_upgrade_to_ga_db_script: "{{ temp_iiq_path }}\\WEB-INF\\database\\upgrade_identityiq_tables.sqlserver"
+      iiq_upgrade_to_patch_db_script: "{{ temp_iiq_path }}\\WEB-INF\\database\\upgrade_identityiq_tables-{{ iiq_version_new }}{{ iiq_patch_new }}.sqlserver"
+      temp_iiq_backup_path: "{{ temp_download_path }}\\iiq-backup-{{ iiq_version_old }}{{ iiq_patch_old }}"
+      start_empty_updated_iiq: "yes"
+      shared_roles_files: C:\vagrant\roles\iiq-upgrade\files
+
+      ## Existing variables
+      mssql_sa_password: "Password1234"
+      iiq_tomcat_webapps: C:\ProgramData\Tomcat9\webapps
+      iiq_tomcat_path: "{{ iiq_tomcat_webapps }}\\identityiq"
+      iiq_web_inf: "{{ iiq_tomcat_path }}\\WEB-INF"
+      iiq_db_password: "{{ mssql_sa_password }}"
+      libs_to_copy:
+        - sqljdbc42.jar #need to copy JDBC driver for MS SQL Server 
+
+    roles:
+      - iiq-upgrade
+          

@@ -1,0 +1,42 @@
+---
+
+  - name: Stop tomcat9 service
+    systemd: name=tomcat9 state=stopped
+
+  - name: "Unzip patch file {{ iiq_patch_file_new }} into {{ temp_iiq_path }}"
+    unarchive: 
+      src: "{{ role_path }}/files/{{ iiq_patch_file_new }}"
+      dest: "{{ temp_iiq_path }}"
+      remote_src: no
+      creates: "{{ iiq_upgrade_to_patch_db_script }}"
+
+  - include: get_iiq_database_version.yml
+  - name: "MSSQL Server | Run the database upgrade patch script to upgrade to {{ iiq_version_new }}{{ iiq_patch_new }}"
+    shell: | 
+      /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "{{ mssql_sa_password }}" -i "{{ iiq_upgrade_to_patch_db_script }}"
+    # when: version_arr == iiq_version_ga_sys_upgrade
+
+  - include: get_iiq_database_version.yml
+  - name: "Patch IIQ system to {{ iiq_version_new }}{{ iiq_patch_new }} (run 'iiq patch {{ iiq_version_new }}{{ iiq_patch_new }}' command)"
+    command: "{{ temp_iiq_console }} patch {{ iiq_version_new }}{{ iiq_patch_new }}"
+    register: iiq_patch
+    # when: version_arr == iiq_version_patch_upgrade
+    failed_when: '"success" not in iiq_patch.stdout'
+
+  - name: Check 'iiq patch output'
+    debug: 
+      msg: "{{ iiq_patch.stdout }}"
+    when: iiq_patch.stdout is defined
+
+
+  - name: "Copy a fully upgraded empty identityiq to webapps"
+    copy: 
+      src: "{{ temp_iiq_path }}" 
+      dest: "{{ iiq_tomcat_webapps }}" 
+      remote_src: yes
+      force: no
+    when: start_empty_updated_iiq == "yes"
+
+  - name: Start tomcat9 service
+    systemd: name=tomcat9 state=started
+    when: start_empty_updated_iiq == "yes"

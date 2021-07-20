@@ -1,0 +1,118 @@
+---
+
+## see https://dev.to/darksmile92/powershell-disabled-support-for-tls-1-0-for-the-gallery-update-module-and-install-module-broken-1oii
+## see also https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/
+- name: Run some commands (pls ignore the failure) to fix broken powershell see https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/
+  ansible.windows.win_shell: |
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    Register-PSRepository -Default -Verbose
+    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+  ignore_errors: yes
+  
+- name: Disable firewall for Domain, Public and Private profiles
+  community.windows.win_firewall:
+    state: disabled
+    profiles:
+    - Domain
+    - Private
+    - Public
+
+- name: Ensure that SQLServer DSC Powershell module is present
+  win_psmodule:
+    name: SQLServerDsc
+    state: present
+
+- name: Ensure that Storage DSC Powershell module is present
+  win_psmodule:
+    name: StorageDsc
+    state: present
+
+- name: Ensure that ServerManager Powershell module is present
+  win_psmodule:
+    name: ServerManager
+    state: present
+
+- name: Ensure that DBA Tools module is present 
+  win_psmodule:
+    name: dbatools
+    state: present
+
+- name: Ensure that xNetworking Powershell module is present
+  win_psmodule:
+    name: xNetworking
+    state: present
+
+- name: Install .NET Framework Core
+  win_feature:
+    name: NET-Framework-Core
+    state: present
+
+- name: Install .NET Framework 3.5
+  win_feature:
+    name: NET-Framework-Features
+    state: present
+
+- name: Install .NET Framework 4.5 Features
+  win_feature:
+    name: NET-Framework-45-Features
+    state: present
+    include_sub_features: True
+
+- name: Install Windows Process Activation Service
+  win_feature:
+    name: WAS
+    state: present
+    include_sub_features: True
+
+- name: Get SQL Server Downloader
+  win_get_url:
+    url: "{{ mssql_installation_source }}"
+    dest: "{{ temp_download_path }}\\SQLServer2017-SSEI-Dev.exe"
+
+- name: Use Media Downloader to fetch SQL Installation CABs to {{ mssql_installation_path }}
+  win_shell: "{{ temp_download_path }}\\SQLServer2017-SSEI-Dev.exe /Action=Download /MediaPath={{ mssql_installation_path }} /MediaType=CAB /Quiet"
+
+- name: Ensure installation media extraction path is empty
+  win_file:
+    path: "{{ mssql_installation_path }}\\Media"
+    state: absent
+
+- name: Extract installation media
+  win_shell: "{{ mssql_installation_path }}\\SQLServer2017-DEV-x64-ENU.exe /X:{{ mssql_installation_path }}\\Media /Q"
+
+
+## If the setup fails, pls look at the log files under C:\Program Files\Microsoft SQL Server\...\Setup Bootstrap\Log\
+- name: Install SQL Server
+  win_dsc:
+    resource_name: SQLSetup
+    Action: Install
+    UpdateEnabled: False
+    SourcePath: "{{ mssql_installation_path }}\\Media"
+    InstanceName: "{{ mssql_instance_name }}"
+    InstallSharedDir: C:\Program Files\Microsoft SQL Server
+    InstallSharedwowDir: C:\Program Files (x86)\Microsoft SQL Server
+    InstanceDir: C:\Program Files\Microsoft SQL Server
+    SQLUserDBDir: C:\MSSQL\Data
+    SQLUserDBLogDir: C:\MSSQL\DataLogs
+    SQLTempDBDir: C:\MSSQL\TempDB
+    SQLTempDBLogDir: C:\MSSQL\TempDBLogs
+    SQLBackupDir: C:\MSSQL\Backup    
+    Features: SQLENGINE,FULLTEXT,CONN
+    SQLCollation: SQL_Latin1_General_CP1_CI_AS
+    BrowserSvcStartupType: Manual
+    SuppressReboot: False
+    SecurityMode: SQL
+    SAPwd_username: sa
+    SAPwd_password: '{{ mssql_sa_password }}'
+    PsDscRunAsCredential_username: '{{ ansible_user | d(omit) }}'
+    PsDscRunAsCredential_password: '{{ ansible_password | d(omit)}}'
+    SQLSysAdminAccounts: BUILTIN\Administrators
+
+- name: Enable TCP connectivity
+  win_dsc:
+    resource_name: SqlServerNetwork
+    InstanceName: "{{ mssql_instance_name }}"
+    ProtocolName: tcp
+    TcpPort: 1433
+    IsEnabled: True
+    RestartService: True

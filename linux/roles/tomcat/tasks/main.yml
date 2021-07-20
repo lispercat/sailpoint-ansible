@@ -1,0 +1,10 @@
+---
+# tasks file for tomcat
+  - name: Install tomcat9 packages
+    apt:
+      pkg:
+      - tomcat9
+      - tomcat9-admin
+
+  - name: Stop tomcat9 service
+    systemd: name=tomcat9 state=stopped

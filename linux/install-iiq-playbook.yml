@@ -1,0 +1,23 @@
+---
+  - hosts: all
+    become: yes
+    become_method: sudo
+    gather_facts: no
+    vars:
+      mssql_sa_password: "Password1234"
+      mssql_pid: developer
+    roles:
+      - role: java
+      - role: tomcat
+      - role: mssql
+      - role: iiq
+        iiq_version: "8.0"
+        iiq_patch: "p1"
+        iiq_tomcat_path: "/var/lib/tomcat9/webapps/identityiq"
+        iiq_web_inf: "{{ iiq_tomcat_path }}/WEB-INF"
+        iiq_console: "{{ iiq_web_inf }}/bin/iiq"
+        iiq_create_db_script: "{{ iiq_web_inf }}/database/create_identityiq_tables.sqlserver"
+        iiq_db_password: "{{ mssql_sa_password }}"
+        iiq_dev_accelerator_workflow: "https://raw.githubusercontent.com/lispercat/sailpoint-iiq-dev-accelerator/master/src/workflow.xml"
+        
+          

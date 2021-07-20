@@ -1,0 +1,11 @@
+---
+ 
+  - name: MSSQL Server | Check db schema version 
+    win_command: "sqlcmd -S localhost -U SA -P {{ mssql_sa_password }} -d identityiq -Q \"select * from identityiq.spt_database_version\""
+    register: iid_system_schema_version
+
+  - name: Getting system and schema version of existing iiq
+    set_fact:
+      version_arr: "{{ iid_system_schema_version.stdout | regex_search('(\\d+\\.\\d+-\\d+).*(\\d+\\.\\d+-\\d+)', '\\1', '\\2') }}"
+
+  - debug: msg="{{ version_arr[0] }} and {{ version_arr[1] }}"

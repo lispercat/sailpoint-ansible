@@ -1,0 +1,58 @@
+---
+
+  - name: "Ensure {{ iiq_tomcat_path }} exists"
+    win_file:
+      path: "{{ iiq_tomcat_path }}"
+      state: directory
+
+  - name: "Copy {{ iiq_mapped_iiq_ssd_build_war }} to {{ temp_download_path }}\\identityiq.zip"
+    win_copy: 
+      src: "{{ iiq_mapped_iiq_ssd_build_war }}"
+      dest: "{{ temp_download_path }}\\identityiq.zip"
+      remote_src: yes
+      force: no
+
+  - name: "Unzip {{ temp_download_path }}\\identityiq.zip into {{ iiq_tomcat_path }}"
+    win_unzip: 
+      src: "{{ temp_download_path }}\\identityiq.zip"
+      dest: "{{ iiq_tomcat_path }}"
+      creates: "{{ iiq_web_inf }}"
+
+  - name: "Unzip {{ temp_download_path }}/identityiq.zip into {{ iiq_tomcat_path }}"
+    unarchive: 
+      src: "{{ role_path }}/files/identityiq.zip"
+      dest: "{{ iiq_tomcat_path }}"
+      creates: "{{ iiq_web_inf }}"
+
+  - name: Checks that the DB schema is generated
+    win_command: "{{ iiq_console }} schema"
+    args:
+      creates: "{{ iiq_create_db_script }}"
+
+  - name: Replace identityiq passwords for our own
+    win_lineinfile:
+      path: "{{ iiq_create_db_script }}"
+      backrefs: yes      
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    loop:
+      - {regexp: "(.*WITH PASSWORD=)('identityiq')", line: "$1'{{ iiq_db_password }}'"}
+      - {regexp: "(.*WITH PASSWORD=)('identityiqPlugin')", line: "$1'{{ iiq_db_password }}'"}
+
+  - name: MSSQL Server | Check identityiq databases (should be 2)
+    win_command: "sqlcmd -S localhost -U SA -P {{ mssql_sa_password }} -Q \"select count(*) from sys.databases where name like 'identityiq%'\""
+    register: iid_db_cnt
+    ignore_errors: yes
+
+  - debug: msg="master cnt is {{ iid_db_cnt.stdout }}"
+
+  - name: MSSQL Server | Generate IIQ database
+    win_command: | 
+      sqlcmd -S localhost -U SA -P "{{ mssql_sa_password }}" -i "{{ iiq_create_db_script }}"
+    when: iid_db_cnt.stdout.find(" 2") == -1
+
+  - name: Start tomcat9 service
+    win_service: 
+      name: "Apache Tomcat 9.0 Tomcat9"
+      state: started
+

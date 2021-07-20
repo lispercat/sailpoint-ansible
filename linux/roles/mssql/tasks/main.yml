@@ -1,0 +1,73 @@
+---
+
+  - name: MSSQL Server | Check installed
+    shell: "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P {{ mssql_sa_password }} -Q \"SELECT @@VERSION\""
+    become: yes
+    register: mssql_present
+    changed_when: False
+    ignore_errors: yes
+
+  - name: MSSQL Server | Add key
+    ansible.builtin.apt_key: 
+      url: https://packages.microsoft.com/keys/microsoft.asc
+      state: present
+    become: yes
+    when: mssql_present is failed
+
+  - name: MSSQL Server | Add apt repository for mssql-server
+    ansible.builtin.apt_repository:
+      repo: deb [arch=amd64,armhf,arm64] https://packages.microsoft.com/ubuntu/20.04/mssql-server-2019 focal main
+      state: present
+    become: yes
+    when: mssql_present is failed
+
+  - name: MSSQL Server | Install mssql-server packages
+    apt: 
+      name: "mssql-server" 
+      state: present
+      update_cache: true
+    become: yes
+    when: mssql_present is failed
+
+  - name: MSSQL Server | Ensure SQL Server stopped before configuration
+    service: name="mssql-server" enabled="yes" state="stopped"
+    become: yes
+
+  - name: MSSQL Server | Running mssql-conf setup...
+    shell: /opt/mssql/bin/mssql-conf -n setup accept-eula
+    environment:
+      MSSQL_SA_PASSWORD: "{{ mssql_sa_password }}"
+      MSSQL_PID: "{{ mssql_pid }}"
+    become: yes
+
+  - name: MSSQL Server | Add apt repository for mssql-tools and unix odbc
+    ansible.builtin.apt_repository:
+      repo: deb [arch=amd64,armhf,arm64] https://packages.microsoft.com/ubuntu/20.04/prod focal main
+      state: present
+      filename: msprod
+    become: yes
+    when: mssql_present is failed
+
+  - name: MSSQL Server | Installing mssql-tools and unixODBC developer
+    apt:
+      pkg:
+        - mssql-tools
+        - unixodbc-dev
+      state: present
+      update_cache: true
+    environment:
+      ACCEPT_EULA: Y
+    become: yes
+    when: mssql_present is failed
+
+  - debug: msg="add /opt/mssql-tools/bin to path"
+  - name: add /opt/mssql-tools/bin to path
+    lineinfile:
+      dest: /etc/environment
+      state: present
+      backrefs: yes
+      regexp: 'PATH=(["]*)((?!.*?/opt/mssql-tools/bin).*?)(["]*)$'
+      line: "PATH=\\1\\2:/opt/mssql-tools/bin\\3"
+    become: yes
+
+

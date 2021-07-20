@@ -1,0 +1,1 @@
+ansible all -m win_ping -i inventory.yml

@@ -1,0 +1,34 @@
+---
+
+- name: Install Sailpoint IIQ 
+  hosts: win-iiq
+  vars:
+    mssql_sa_password: Password1234
+    temp_download_path: C:\temp
+  roles:
+    - role: choc_pack
+      package: openjdk11 #https://community.chocolatey.org/packages/openjdk11
+      state: present
+      version: 11.0.11.9
+    - role: choc_pack
+      package: tomcat #https://community.chocolatey.org/packages/Tomcat
+      state: present
+      version: 9.0.45
+    - role: mssql
+      mssql_installation_path: C:\SQLInstall
+      mssql_installation_source: https://go.microsoft.com/fwlink/?linkid=853016
+      mssql_instance_name: iiqdb
+    - role: iiq
+      iiq_version: "8.0"
+      iiq_patch: "p1"
+      iiq_mapped_iiq_ssd_build_war: C:\vagrant\roles\iiq\files\identityiq.war #It's a mapped shared link vagrant creates between host os and target VM
+      iiq_tomcat_path: C:\ProgramData\Tomcat9\webapps\identityiq
+      iiq_web_inf: "{{ iiq_tomcat_path }}\\WEB-INF"
+      iiq_console: "{{ iiq_web_inf }}\\bin\\iiq.bat"
+      iiq_create_db_script: "{{ iiq_web_inf }}\\database\\create_identityiq_tables.sqlserver"
+      iiq_db_password: "{{ mssql_sa_password }}"
+      iiq_dev_accelerator_workflow: "https://raw.githubusercontent.com/lispercat/sailpoint-iiq-dev-accelerator/master/src/workflow.xml"
+      tags: iiq
+      
+
+      

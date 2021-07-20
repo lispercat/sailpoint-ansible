@@ -1,0 +1,7 @@
+---
+
+  - name: "Install Chocolatey package {{ package }}"
+    win_chocolatey:
+      name: "{{ package }}"
+      state: "{{ state }}"
+      version: "{{ version }}"

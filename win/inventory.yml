@@ -1,0 +1,10 @@
+all:
+  hosts:
+    win-iiq:
+      ansible_host: 192.168.10.12
+      ansible_connection: winrm
+      ansible_user: vagrant
+      ansible_password: vagrant
+      ansible_winrm_transport: ntlm
+      ansible_port: 5985
+      ansible_winrm_server_cert_validation: ignore

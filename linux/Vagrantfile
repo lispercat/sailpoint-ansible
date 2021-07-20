@@ -1,0 +1,30 @@
+Vagrant.configure("2") do |config|
+  
+    config.vm.provider :virtualbox do |vb|
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    end
+
+    #so that we could use the private_key files, (not too much permission) and execute bash files too let's mount files with 700 permission
+    config.vm.synced_folder "./", "/vagrant",
+    owner: "vagrant",
+    mount_options: ["dmode=775,fmode=700"]
+
+    config.vm.define "iiq", primary: true do |box|
+      box.vm.network "private_network", ip: "192.168.10.11"
+      box.vm.box = "ubuntu/impish64"
+      box.vm.hostname = "iiq"
+      box.vm.provider "virtualbox" do |v|
+        v.name = "ubuntu-ansible-sailpoint"
+        v.memory = 4000
+        v.cpus = 2
+      end 
+      box.vm.provision "shell", inline: <<-SHELL
+        sudo apt update
+        sudo apt install -y ansible unzip
+        sudo timedatectl set-timezone America/Toronto
+      SHELL
+      box.vm.provision "ansible_local" do |ansible|
+        ansible.playbook = "install-iiq-playbook.yml"
+      end
+    end
+  end

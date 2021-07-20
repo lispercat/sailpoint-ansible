@@ -1,0 +1,23 @@
+Vagrant.configure("2") do |config|
+  
+    config.vm.provider :virtualbox do |vb|
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    end
+
+    #so that we could use the private_key files, (not too much permission) and execute bash files too let's mount files with 700 permission
+    config.vm.synced_folder "./", "/vagrant",
+    owner: "vagrant",
+    mount_options: ["dmode=775,fmode=700"]
+
+    config.vm.define "win-iiq", primary: true do |box|
+      box.vm.box = "jborean93/WindowsServer2016"
+      box.vm.network "private_network", ip: "192.168.10.12"
+      box.vm.hostname = "win-iiq"
+      box.vm.provider "virtualbox" do |v|
+        v.name = "windows-sailpoint-iiq"
+        v.memory = 4000
+        v.cpus = 2
+      end      
+    end
+
+  end

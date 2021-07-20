@@ -1,0 +1,45 @@
+---
+
+  - name: "Copy {{ shared_roles_files }}\\{{ iiq_patch_file_new }} to {{ temp_download_path }}\\{{ iiq_patch_file_new_zip }}"
+    win_copy: 
+      src: "{{ shared_roles_files }}\\{{ iiq_patch_file_new }}"
+      dest: "{{ temp_download_path }}\\{{ iiq_patch_file_new_zip }}"
+      remote_src: yes
+      force: no
+
+  - name: "Unzip patch file {{ iiq_patch_file_new_zip }} into {{ temp_iiq_path }}"
+    win_unzip: 
+      src: "{{ temp_download_path }}\\{{ iiq_patch_file_new_zip }}"
+      dest: "{{ temp_iiq_path }}"
+      remote_src: yes
+      creates: "{{ iiq_upgrade_to_patch_db_script }}"
+
+  - include: get_iiq_database_version.yml
+  - name: "MSSQL Server | Run the database upgrade patch script to upgrade to {{ iiq_version_new }}{{ iiq_patch_new }}"
+    win_command: sqlcmd -S localhost -U SA -P "{{ mssql_sa_password }}" -i "{{ iiq_upgrade_to_patch_db_script }}"
+
+  - include: get_iiq_database_version.yml
+  - name: "Patch IIQ system to {{ iiq_version_new }}{{ iiq_patch_new }} (run 'iiq patch {{ iiq_version_new }}{{ iiq_patch_new }}' command)"
+    win_command: "{{ temp_iiq_console }} patch {{ iiq_version_new }}{{ iiq_patch_new }}"
+    register: iiq_patch
+    failed_when: '"success" not in iiq_patch.stdout'
+
+  - name: Check 'iiq patch output'
+    debug: 
+      msg: "{{ iiq_patch.stdout }}"
+    when: iiq_patch.stdout is defined
+
+
+  - name: "Copy a fully upgraded empty identityiq to webapps"
+    win_copy: 
+      src: "{{ temp_iiq_path }}" 
+      dest: "{{ iiq_tomcat_webapps }}" 
+      remote_src: yes
+      force: no
+    when: start_empty_updated_iiq == "yes"
+
+  - name: Start tomcat9 service
+    win_service: 
+      name: "Apache Tomcat 9.0 Tomcat9"
+      state: started
+    when: start_empty_updated_iiq == "yes"
